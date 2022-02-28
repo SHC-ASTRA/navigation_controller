@@ -15,8 +15,7 @@ class NavigationController:
         rospy.init_node("navigation_controller")
         rospy.loginfo("Setting up node.")
 
-        #self.imu_subscriber = rospy.Subscriber('/imu/data', Imu, self.handle_imu_update, queue_size=1)
-        self.mag_subscriber = rospy.Subscriber('/imu/mag', MagneticField, self.handle_mag_update, queue_size=1)
+        self.mag_subscriber = rospy.Subscriber('/sensor/zed2/zed_node/imu/mag', MagneticField, self.handle_mag_update, queue_size=1)
         self.gps_subscriber = rospy.Subscriber('/gps', NavSatReport, self.handle_gps_update, queue_size=1)
         self.command_subsciber = rospy.Subscriber('/navigation_command', NavigationCommand, self.handle_nav_command, queue_size=1)
 
