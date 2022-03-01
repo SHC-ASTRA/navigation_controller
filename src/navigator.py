@@ -2,8 +2,11 @@
 
 import math
 import rospy
+import time
 from control_input_aggregator.msg import ControlInput
 from embedded_controller_relay.msg import NavSatReport
+from embedded_controller_relay.srv import SignalColor, SignalColorResponse
+from geopy import distance
 from navigation_controller.msg import NavigationCommand
 from sensor_msgs.msg import Imu, MagneticField
 
@@ -16,10 +19,12 @@ class NavigationController:
         rospy.loginfo("Setting up node.")
 
         self.mag_subscriber = rospy.Subscriber('/sensor/zed2/zed_node/imu/mag', MagneticField, self.handle_mag_update, queue_size=1)
-        self.gps_subscriber = rospy.Subscriber('/gps', NavSatReport, self.handle_gps_update, queue_size=1)
+        self.gps_subscriber = rospy.Subscriber('/teensy/gps', NavSatReport, self.handle_gps_update, queue_size=1)
         self.command_subsciber = rospy.Subscriber('/navigation_command', NavigationCommand, self.handle_nav_command, queue_size=1)
 
         self.control_input_publisher = rospy.Publisher('/control_input', ControlInput, queue_size=1)
+        
+        self.signal_service = rospy.ServiceProxy('/signal_operating_mode', SignalColor)
 
         #-----------------------
         # Rover Data Storage
@@ -30,6 +35,7 @@ class NavigationController:
         # GPS Data
         self.latitude = 'NaN'
         self.longitude = 'NaN'
+        self.gps_fix = False
 
         # Target Navigation Information
         self.target_type = 'NaN'
@@ -40,6 +46,9 @@ class NavigationController:
 
         # Heading Follow Information
         self.heading_goal = 'NaN'
+
+        # Control States
+        self.control_state = 'Idle'
 
 
     def handle_imu_update(self, data):
@@ -70,8 +79,10 @@ class NavigationController:
         #print(self.heading)
 
     def handle_gps_update(self, data):
-        self.latitude = data.latitude
-        self.longitude = data.longitude
+        self.gps_fix = True
+
+        self.latitude = float(data.latitude)
+        self.longitude = float(data.longitude)
 
         #print(self.latitude, self.longitude)
 
@@ -91,6 +102,9 @@ class NavigationController:
 
         print(data)
 
+        self.signal_service("autonomous")
+        self.control_state = "Navigate"
+        
         self.calculate_target_heading()
 
     def calculate_target_heading(self):
@@ -104,13 +118,18 @@ class NavigationController:
 
         print("Headings:", self.heading_goal, self.heading)
 
+    def calculate_target_distance(self):
+        return distance.distance(
+            (self.latitude, self.longitude),
+            (self.target_latitude, self.target_longitude)
+        )
 
     def match_heading(self):
-        self.calculate_target_heading()
-    
-        # Return if rover heading is unknown
-        if self.heading is 'NaN':
+        # Return if rover heading or gps is unknown
+        if self.heading is 'NaN' or not self.gps_fix:
             return
+
+        self.calculate_target_heading()
 
         # Determine whether to turn left or right
         delta_left = abs(self.heading + 360 - self.heading_goal) if self.heading < self.heading_goal else abs(self.heading - self.heading_goal)
@@ -142,10 +161,27 @@ class NavigationController:
         # set the control rate
         rate = rospy.Rate(10)
 
+        last_signal = 0
+        last_goal = 0
+
         while not rospy.is_shutdown():
-            if self.target_type is not 'NaN':
+            if self.control_state == "Navigate":
                 self.match_heading()
 
+                if self.calculate_target_distance() < self.target_accuracy:
+                    self.control_state = "Goal"
+                    self.last_goal = time.time()
+
+            elif self.control_state == "Goal":
+                if time.time() - last_signal > 1:
+                    self.signal_service("goal")
+                    last_signal = time.time()
+                
+                if time.time() - last_goal > 10:
+                    self.control_state = "Idle"
+                    self.signal_service("idle")
+
+                
             rate.sleep()
 
 
