@@ -22,7 +22,7 @@ class NavigationController:
         self.gps_subscriber = rospy.Subscriber('/teensy/gps', NavSatReport, self.handle_gps_update, queue_size=1)
         self.command_subsciber = rospy.Subscriber('/navigation_command', NavigationCommand, self.handle_nav_command, queue_size=1)
 
-        self.control_input_publisher = rospy.Publisher('/control_input', ControlInput, queue_size=1)
+        self.control_input_publisher = rospy.Publisher('/autonomous_control', ControlInput, queue_size=1)
         
         self.signal_service = rospy.ServiceProxy('/signal_operating_mode', SignalColor)
 
@@ -91,6 +91,11 @@ class NavigationController:
             self.target_type = 'Gate'
         elif data.target == 'Post':
             self.target_type = 'Post'
+        elif data.target == 'Abort':
+            self.target_type = 'NaN'
+            self.control_state = 'Idle'
+            self.signal_service("idle")
+            return
         else:
             rospy.logwarn("Received invalid navigation command with target type: " + data.target)
             return
@@ -150,7 +155,7 @@ class NavigationController:
 
         control_input = ControlInput()
         control_input.channel = "navigator"
-        control_input.heading = (0, delta)
+        control_input.heading = (self.calculate_target_distance(), delta)
         control_input.speed_clamp = .75
         control_input.is_urgent = False
         
