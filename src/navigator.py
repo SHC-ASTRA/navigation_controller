@@ -170,7 +170,7 @@ class NavigationController:
 
                 if self.calculate_target_distance() < self.target_accuracy:
                     self.control_state = "Goal"
-                    self.last_goal = time.time()
+                    last_goal = time.time()
 
             elif self.control_state == "Goal":
                 if time.time() - last_signal > 1:
