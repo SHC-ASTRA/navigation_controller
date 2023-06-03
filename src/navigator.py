@@ -1,7 +1,6 @@
 #!/usr/bin/python
-
 import math
-import rospy
+import roslibpy as rospy
 import time
 from control_input_aggregator.msg import ControlInput
 from embedded_controller_relay.msg import NavSatReport
@@ -152,7 +151,7 @@ class NavigationController:
         print(abs(delta))
         if abs(delta) < 20.0/180:
             delta = 0
-
+        #THIS IS THE PLACE WHERE WE ARE CALLING ROVER TO MOVE
         control_input = ControlInput()
         control_input.channel = "navigator"
         control_input.heading = (self.calculate_target_distance(), delta)
